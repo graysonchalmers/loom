@@ -1,0 +1,9 @@
+loom
+Copyright (c) 2026 uilianks
+
+loom is inspired by claude-pxl (https://github.com/crsolver/claude-pxl),
+Copyright (c) 2026 crsolver, released under the MIT License.
+
+Portions of loom (the source-file sandbox loader, error formatting, CLI and
+live-server structure) are adapted from claude-pxl, via vex. They are
+distributed under the same MIT License; see LICENSE.

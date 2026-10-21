@@ -1,0 +1,32 @@
+{
+  "name": "loom-textures",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Seamless game textures and PBR materials as code for AI agents and humans: noise, cells, bricks, planks, weathering, normal/height/roughness/AO maps, lit previews and a live viewer.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "loom": "./bin/loom.js"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/uilianks/loom.git"
+  },
+  "homepage": "https://github.com/uilianks/loom#readme",
+  "keywords": ["textures", "pbr", "materials", "procedural", "seamless", "normal-map", "gamedev", "dsl", "ai-agent", "claude-code", "skill"]
+}
