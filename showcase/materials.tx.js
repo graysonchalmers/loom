@@ -126,3 +126,16 @@ pal({
     rough: pour.levels(0, 1, 0.75, 0.92).mix(0.32, wet.mul(0.8)),
   })
 }
+
+// ---------------------------------------------------------------- hammered gold (coins, a dragon's hoard)
+{
+  const dents = cells({ scale: 14, jitter: 0.9, seed: 71 })
+  const hammer = dents.smooth(0, 0.9).mul(0.7).add(noise({ scale: 32, octaves: 3, seed: 72 }).mul(0.15)).as("hammer marks")
+  const tarnish = hammer.cavity(0.01, 10).max(noise({ scale: 5, seed: 73 }).threshold(0.68, 0.2).mul(0.5)).as("tarnish")
+  material("hammered_gold", { size: 512, depth: 0.02 }, {
+    height: hammer,
+    color: ramp(hammer, ["#8a5a12", "#d9a032", "#ffe08a"]).mix("#4a3410", tarnish.mul(0.6)),
+    rough: hammer.levels(0, 1, 0.42, 0.18).mix(0.7, tarnish),
+    metal: tarnish.invert().mul(0.25).add(0.75),
+  })
+}

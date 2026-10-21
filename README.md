@@ -17,9 +17,19 @@ Part of a family with [**vex**](https://github.com/uilianks/vex) (vector art, sk
 files, lazy cached builds, errors with exact locations, a live viewer and an annotate-and-send
 feedback loop.
 
+## In a 3D scene
+
+[![The Dragon's Hoard, rendered in Blender: every surface is a loom material](docs/media/dragon_hoard.png)](https://github.com/uilianks/kiln#the-dragons-hoard-textured-with-loom)
+
+*The Dragon's Hoard*, built in [**kiln**](https://github.com/uilianks/kiln) and rendered in Blender:
+mossy brick, wet cobblestone, stained concrete, worn wood, rusted iron, glowing lava rock, dragon
+scales and hammered gold, all from [`showcase/materials.tx.js`](showcase/materials.tx.js). A kiln
+palette entry points at a loom output folder (`{ tex: "…/brick_wall", uv: 1.5 }`) and the GLB embeds
+the albedo, normal, ORM and emissive maps.
+
 ## Showcase
 
-Eight materials from [`showcase/materials.tx.js`](showcase/materials.tx.js), about 15 lines each.
+Nine materials from [`showcase/materials.tx.js`](showcase/materials.tx.js), about 15 lines each.
 
 ![Eight loom materials on lit spheres: brick wall, rusty panels, wet cobblestone, wood planks, sci-fi panel, lava rock, dragon scales, stained concrete](docs/media/gallery.png)
 
@@ -37,6 +47,7 @@ Each one tiled 3×3: no seams.
 | lava_rock | `cells` crust over glowing `emit` magma in the cracks |
 | dragon_scales | overlapping `scales`, hue sheen per scale, metallic gold rims |
 | stained_concrete | poured `noise`, pits, saw-cut seams, wet stains with low roughness |
+| hammered_gold | `cells` dents hammered into the metal, tarnish in the hollows |
 
 ## Quick start
 
