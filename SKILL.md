@@ -55,9 +55,13 @@ material("brick_wall", { size: 512, depth: 0.03 }, {
 ## Essentials
 
 - **Fields** are values over the tile (u, v in 0..1, v down). Generators: `noise ridged cells dots
-  bricks tiles hex planks scales stripes waves`. Patterns expose parts: `b.mask` (1 brick, 0 mortar),
+  bricks tiles hex planks scales stripes waves weave checker shape`. Patterns expose parts: `b.mask` (1 brick, 0 mortar),
   `b.id` (random per piece: vary tone/height per brick), `b.dist` (0 at the edge, 1 in the middle),
-  `planks().grain`, `cells().edge`.
+  `planks().grain`, `cells().edge`, `weave().mask`. `shape({ kind: "star", r: 0.3 })` is a decal mask
+  (circle, rect, ngon, star, ring, line) for markings, rims, runes and logos.
+- **From an image**: `image("photo.png", { seamless: 0.25 })` is a photo or painted texture as a color
+  (blended at the edges so it tiles); `image("h.png").luma()` is a height map. Mix them with generated
+  detail (`.mix(ramp(...), mask)`, grime in `cavity()` of the luma) for photo-based PBR materials.
 - **Ops** chain: `add sub mul div min max mix(b, t) pow abs invert clamp levels smooth threshold
   normalize`, space: `blur(r) warp(f, amount) offset repeat(k) rotate flip`, reading height:
   `edge() convex(r) cavity(r) facing("up") drips({ length })`. Numbers are accepted anywhere.

@@ -42,6 +42,10 @@ declare global {
   function scales(o?: { rows?: number; cols?: number; size?: number; seed?: number }): LoomField & { id: LoomField };
   function stripes(o?: { count?: number; dir?: "h" | "v"; soft?: number }): LoomField;
   function waves(o?: { count?: number; dir?: "h" | "v"; warp?: number; scale?: Scale; seed?: number }): LoomField;
+  function weave(o?: { threads?: number; gap?: number; seed?: number }): LoomField & { mask: LoomField };
+  function checker(o?: { cols?: number; rows?: number }): LoomField;
+  function shape(o?: { kind?: "circle" | "rect" | "ngon" | "star" | "ring" | "line"; cx?: number; cy?: number; r?: number; w?: number; h?: number; sides?: number; inner?: number; round?: number; rot?: number; soft?: number; x0?: number; y0?: number; x1?: number; y1?: number }): LoomField;
+  function image(src: string, o?: { seamless?: number }): LoomTex;
   function color(hex: string): LoomTex;
   function ramp(f: LoomField, stops: (string | [number, string])[]): LoomTex;
 }

@@ -6,12 +6,65 @@ import * as gen from "./gen.ts";
 import { type Maps, type MaterialDef, MATERIAL_OPTS, buildMaps, defineMaterial } from "./material.ts";
 import { parseHex } from "./util.ts";
 
+/** A decoded raster for image(): straight 8-bit RGBA. */
+export interface Rgba {
+  w: number;
+  h: number;
+  rgba: Uint8Array;
+}
+
+const IMAGE_KEYS = ["seamless"];
+
+/**
+ * A photo or painted texture as a color: resampled to the tile size, and with `seamless` > 0 blended
+ * at the edges with a half-tile-offset copy (which brings the image's middle to the seam), so it
+ * tiles. The band is `seamless` tile units wide. `.luma()` turns it into a height or mask field.
+ */
+export function imageTex(img: Rgba, seamless: number, label: string): Tex {
+  return new Tex((n) => {
+    // box-prefilter big images so shrinking them doesn't alias, then sample bilinearly
+    const k = Math.max(1, Math.floor(Math.min(img.w, img.h) / n));
+    const sw = Math.floor(img.w / k), sh = Math.floor(img.h / k), small = new Float32Array(sw * sh * 3);
+    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+      let r = 0, g = 0, b = 0;
+      for (let j = 0; j < k; j++) for (let i = 0; i < k; i++) { const o = ((y * k + j) * img.w + x * k + i) * 4; r += img.rgba[o]; g += img.rgba[o + 1]; b += img.rgba[o + 2]; }
+      const o = (y * sw + x) * 3, d = 255 * k * k;
+      small[o] = r / d; small[o + 1] = g / d; small[o + 2] = b / d;
+    }
+    // bilinear; the offset copy wraps (it is meant to cross the edges), the plain image clamps at its border
+    const tap = (u: number, v: number, c: number, wrap: boolean) => {
+      const x = u * sw - 0.5, y = v * sh - 0.5, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+      const ix = (xx: number) => (wrap ? ((xx % sw) + sw) % sw : Math.max(0, Math.min(sw - 1, xx)));
+      const iy = (yy: number) => (wrap ? ((yy % sh) + sh) % sh : Math.max(0, Math.min(sh - 1, yy)));
+      const at = (xx: number, yy: number) => small[(iy(yy) * sw + ix(xx)) * 3 + c];
+      return (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+    };
+    const out = new Float32Array(n * n * 3);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const u = (x + 0.5) / n, v = (y + 0.5) / n;
+      const edge = Math.min(u, 1 - u, v, 1 - v), wgt = seamless > 0 ? 1 - smoothstep(0, seamless, edge) : 0;
+      for (let c = 0; c < 3; c++) {
+        const a = tap(u, v, c, false);
+        out[(y * n + x) * 3 + c] = wgt > 0 ? a + (tap(u + 0.5, v + 0.5, c, true) - a) * wgt : a;
+      }
+    }
+    return out;
+  }, label);
+}
+
+const smoothstep = (a: number, b: number, v: number) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a || 1e-9))); return t * t * (3 - 2 * t); };
+
 export class Project {
   readonly files: string[] = [];
   readonly materials = new Map<string, MaterialDef>();
   readonly order: string[] = [];
   readonly palette = new Map<string, [number, number, number]>();
   includeHook?: (path: string) => void;
+  /** Set by a loader: resolves a path written in a material file against that file. */
+  pathHook: (path: string) => string = (p) => p;
+  /** Set by a loader: reads and decodes a PNG by its resolved path. */
+  imageHook?: (path: string) => Rgba;
+  private images = new Map<string, Rgba>();
   private readonly cache = new Map<string, Maps>();
   nodes: { label: string; loc?: string; node: Field | Tex }[] = [];
 
@@ -88,6 +141,22 @@ export class Project {
           this.materials.set(name, defineMaterial(name, opts as never, ch as never, loc));
         } catch (e) { throw wrap(e, (s) => this.locFromStack(s)).within(`material '${name}'`, loc); }
         this.order.push(name);
+      },
+      image: (src: unknown, o: unknown = {}) => {
+        const loc = this.callerLoc();
+        if (typeof src !== "string" || !src) throw new LoomError('image("photo.png", { seamless: 0.25 }): a PNG relative to the material file', loc);
+        if (typeof o !== "object" || o === null || Array.isArray(o)) throw new LoomError("image options must be an object", loc);
+        for (const k of Object.keys(o)) if (!IMAGE_KEYS.includes(k)) throw new LoomError(`image: unknown option '${k}'${didYouMean(k, IMAGE_KEYS)}`, loc);
+        const seamless = (o as Record<string, unknown>).seamless ?? 0;
+        if (typeof seamless !== "number" || !(seamless >= 0 && seamless <= 0.5)) throw new LoomError("image seamless: the edge blend width, 0..0.5 tile units", loc);
+        const abs = this.pathHook(src);
+        let img = this.images.get(abs);
+        if (!img) {
+          if (!this.imageHook) throw new LoomError("image() is not available here (no image loader)", loc);
+          try { img = this.imageHook(abs); } catch (e) { throw wrap(e).within("image", loc); }
+          this.images.set(abs, img);
+        }
+        return imageTex(img, seamless, `image(${src.replace(/^.*[\\/]/, "")})`);
       },
       include: (path: unknown) => {
         if (typeof path !== "string") throw new LoomError('include("other.tx.js")', this.callerLoc());

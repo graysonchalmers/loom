@@ -40,6 +40,15 @@ detail (wood grain, streaks). `seed` picks a different variation.
 | `scales()` | `cols` 8, `rows` (2×cols), `size` 0.62, `seed` | overlapping scales/shingles; `.id` |
 | `stripes()` | `count` 8, `dir` "h"/"v", `soft` 0.3 | parallel bands |
 | `waves()` | `count` 6, `dir`, `warp` 0.4, `scale` 3, `seed` | wavy bands (sand ripples, rings) |
+| `weave()` | `threads` 8 (even), `gap` 0.12, `seed` | basket / cloth weave, over-under strips; `.mask` (1 on a thread) |
+| `checker()` | `cols` 8, `rows` (= cols), both even | checkerboard 0 / 1 (floors, gingham, race flags) |
+| `shape()` | `kind` circle / rect / ngon / star / ring / line, `cx` `cy` 0.5, `r` 0.25, `w` `h`, `sides` 6, `inner`, `round`, `rot` degrees, `soft` 0.01, `x0 y0 x1 y1` (line) | a decal: 1 inside, 0 outside, soft edge; positions wrap so shapes near an edge continue on the other side. Road markings, manhole rims, runes, hazard stripes (`stripes().rotate` + a `rect` mask), buttons, logos. |
+
+### Images
+
+| Call | Meaning |
+|---|---|
+| `image("photo.png", { seamless = 0 })` | A PNG (a photo, a painted texture, a pxl or vex export; path relative to the material file) as a color, resampled to the tile size. `seamless` (0..0.5) blends a band that wide at the edges with a half-tile-offset copy, so a photo tiles without a visible seam. `.luma()` turns it into a height or mask field; `.hsv()`, `.mix()` and `.mul()` work as on any texture. |
 
 `bricks` checks that `rows × offset` is whole, so the courses line up across the tile edge.
 

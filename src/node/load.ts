@@ -6,6 +6,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import * as vm from "node:vm";
 import { LoomError, wrap } from "../core/errors.ts";
 import { Project } from "../core/project.ts";
+import { readImage } from "./image.ts";
 
 function compile(code: string, file: string): string {
   // Type stripping keeps every line and column in place, so error locations stay exact.
@@ -35,6 +36,8 @@ export function loadProject(file: string): Project {
     }
   };
   p.includeHook = (path) => run(isAbsolute(path) ? path : resolve(dirname(stack[stack.length - 1]), path));
+  p.pathHook = (path) => (isAbsolute(path) ? path : resolve(dirname(stack[stack.length - 1] ?? resolve(file)), path));
+  p.imageHook = readImage;
   run(file);
   p.finish();
   return p;
@@ -45,6 +48,7 @@ export function loadSource(src: string, name = "materials.tx.js"): Project {
   const p = new Project();
   const ctx = vm.createContext({ ...p.env(), console, Math });
   p.addFile(name);
+  p.imageHook = readImage;
   try {
     vm.runInContext(compile(src, name), ctx, { filename: name });
   } catch (e) {

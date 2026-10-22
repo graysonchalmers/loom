@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { loadSource } from "../src/node/load.ts";
+import { loadProject, loadSource } from "../src/node/load.ts";
 import { writeOutputs } from "../src/node/output.ts";
 import { serve } from "../src/node/server.ts";
 
@@ -127,4 +127,52 @@ test("serve: feedback notes carry the material and every named field at that pix
     s.close();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("weave, checker and shape tile; shape kinds give decals that wrap at the edges", () => {
+  for (const expr of ["weave({ threads: 6 })", "weave({ threads: 4 }).mask", "checker({ cols: 4, rows: 2 })",
+    "shape({ kind: 'circle', cx: 0.95, cy: 0.5, r: 0.2 })", "shape({ kind: 'rect', w: 0.4, h: 0.2, rot: 30, round: 0.03 })",
+    "shape({ kind: 'ngon', sides: 5, r: 0.3 })", "shape({ kind: 'star', sides: 5, r: 0.3, inner: 0.12 })", "shape({ kind: 'ring', r: 0.3, w: 0.05 })",
+    "shape({ kind: 'line', x0: 0.1, y0: 0.1, x1: 0.9, y1: 0.8, w: 0.04 })"]) {
+    const r = seamRatio(fieldOf(expr), 64);
+    assert.ok(r <= 1.3, `${expr}: seam step is ${r.toFixed(2)}× the worst inner step`);
+  }
+  const c = fieldOf("shape({ kind: 'circle', cx: 0.5, cy: 0.5, r: 0.25, soft: 0.002 })");
+  assert.equal(c[32 * 64 + 32], 1, "inside");
+  assert.equal(c[0], 0, "outside");
+  assert.equal(c[32 * 64 + 5], 0);
+  const edge = fieldOf("shape({ kind: 'circle', cx: 0.0, cy: 0.5, r: 0.2 })");
+  assert.ok(edge[32 * 64 + 2] > 0.99 && edge[32 * 64 + 61] > 0.99, "a shape at the edge wraps to the other side");
+  const ck = fieldOf("checker({ cols: 2 })", 16);
+  assert.deepEqual([ck[0], ck[8], ck[8 * 16], ck[8 * 16 + 8]], [0, 1, 1, 0]);
+  const wv = fieldOf("weave({ threads: 4, gap: 0.2 })", 32);
+  let lo = 1, hi = 0;
+  for (const v of wv) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  assert.ok(lo === 0 && hi > 0.9, `weave spans gaps and raised threads: ${lo}..${hi}`);
+  throwsMsg(() => fieldOf("checker({ cols: 3 })"), /must be even/);
+  throwsMsg(() => fieldOf("weave({ threads: 5 })"), /must be even/);
+  throwsMsg(() => fieldOf("shape({ kind: 'blob' })"), /shape kind/);
+  throwsMsg(() => fieldOf("shape({ kind: 'circle', radius: 1 })"), /unknown option 'radius'/);
+});
+
+test("image() brings a PNG in as a color; seamless blends its edges so it tiles", async () => {
+  const { png } = await import("../src/core/png.ts");
+  const { deflateSync } = await import("node:zlib");
+  const dir = mkdtempSync(join(tmpdir(), "loom-img-"));
+  // a 16x16 horizontal gradient: red on the left, blue on the right (a hard seam when tiled)
+  const w = 16, rgba = new Uint8Array(w * w * 4);
+  for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) rgba.set([Math.round(255 - (x * 255) / 15), 40, Math.round((x * 255) / 15), 255], (y * w + x) * 4);
+  writeFileSync(join(dir, "g.png"), png(w, w, rgba, 4, (b) => deflateSync(b)));
+  writeFileSync(join(dir, "m.tx.js"), `material("raw", { size: 32, ao: 0 }, { color: image("g.png"), height: image("g.png").luma() })
+material("fixed", { size: 32, ao: 0 }, { color: image("g.png", { seamless: 0.3 }) })`);
+  const p = loadProject(join(dir, "m.tx.js"));
+  const raw = p.build("raw"), fixed = p.build("fixed");
+  assert.ok(raw.albedo[0] > 0.9 && raw.albedo[2] < 0.1, "left edge is red");
+  assert.ok(raw.albedo[(31) * 3] < 0.1 && raw.albedo[31 * 3 + 2] > 0.9, "right edge is blue");
+  assert.ok(seamRatio(raw.height, 32) > 3, "a gradient has a hard seam");
+  const seam = (a: Float32Array) => { let s = 0, inner = 0; for (let y = 0; y < 32; y++) { s = Math.max(s, Math.abs(a[(y * 32) * 3] - a[(y * 32 + 31) * 3])); for (let x = 1; x < 32; x++) inner = Math.max(inner, Math.abs(a[(y * 32 + x) * 3] - a[(y * 32 + x - 1) * 3])); } return s / inner; };
+  assert.ok(seam(fixed.albedo) <= 1.3, `seamless: ${seam(fixed.albedo)}`);
+  assert.equal(p.materials.get("raw")!.color.label, "image(g.png)");
+  throwsMsg(() => loadSource(`material("m", { color: image("missing.png") })`), /cannot read image/);
+  throwsMsg(() => loadSource(`material("m", { color: image("g.png", { seamless: 2 }) })`), /0\.\.0\.5/);
 });

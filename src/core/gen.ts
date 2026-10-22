@@ -318,3 +318,99 @@ export function ramp(f: unknown, stops: unknown): Tex {
     return out;
   }, "ramp");
 }
+
+// ---------------------------------------------------------------- weave, checker, shapes
+
+/** Basket weave: `threads` strips each way (whole), over-under alternating, `gap` between strips (fraction of a strip). Height with `.mask` (1 on thread, 0 in the gaps). */
+export function weave(o?: unknown) {
+  const p = opts(o, "weave", ["threads", "gap", "seed"]);
+  const T = whole(p.threads ?? 8, "weave threads"), gap = clamp(num(p.gap ?? 0.12, "weave gap"), 0, 0.9), seed = num(p.seed ?? 1, "weave seed");
+  if (T % 2) throw new LoomError(`weave: threads must be even (got ${T}), or the over-under pattern won't repeat across the tile`);
+  const half = (1 - gap) / 2;
+  const memo = new Map<number, { h: Float32Array; m: Float32Array }>();
+  const get = (n: number) => {
+    let r = memo.get(n);
+    if (r) return r;
+    const h = new Float32Array(n * n), m = new Float32Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const cu = ((x + 0.5) / n) * T, cv = ((y + 0.5) / n) * T, i = Math.floor(cu), j = Math.floor(cv), fx = cu - i - 0.5, fy = cv - j - 0.5;
+      // the horizontal strip runs along u (its width is across v); the vertical one along v
+      const onH = Math.abs(fy) < half, onV = Math.abs(fx) < half, hTop = (i + j) % 2 === 0;
+      const prof = (t: number) => Math.sqrt(Math.max(0, 1 - (t / half) ** 2));
+      let v = 0, mask = 0;
+      const fh = onH ? prof(fy) : 0, fv = onV ? prof(fx) : 0, wob = 1 - 0.08 * hash(i, j, seed);
+      if (onH && (hTop || !onV)) { v = 0.55 + 0.45 * fh * wob; mask = 1; }
+      else if (onV) { v = (onH ? 0.3 : 0.55) + (onH ? 0.25 : 0.45) * fv * wob; mask = 1; }
+      if (onH && onV && hTop) v = 0.55 + 0.45 * fh * wob;
+      h[y * n + x] = v; m[y * n + x] = mask;
+    }
+    memo.set(n, (r = { h, m }));
+    return r;
+  };
+  return withParts(new Field((n) => get(n).h, "weave"), { mask: new Field((n) => get(n).m, "weave.mask") });
+}
+
+/** A checkerboard: `cols` × `rows` squares (both even, so it repeats), 1 and 0. */
+export function checker(o?: unknown): Field {
+  const p = opts(o, "checker", ["cols", "rows"]);
+  const C = whole(p.cols ?? 8, "checker cols"), R = whole(p.rows ?? C, "checker rows");
+  if (C % 2 || R % 2) throw new LoomError(`checker: cols and rows must be even (got ${C} × ${R}), or the squares won't alternate across the tile edge`);
+  return new Field((n) => {
+    const out = new Float32Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) out[y * n + x] = (Math.floor(((x + 0.5) / n) * C) + Math.floor(((y + 0.5) / n) * R)) % 2;
+    return out;
+  }, "checker");
+}
+
+const SHAPE_KEYS = ["kind", "cx", "cy", "r", "w", "h", "sides", "rot", "soft", "inner", "x0", "y0", "x1", "y1", "round"];
+const SHAPE_KINDS = ["circle", "rect", "ngon", "star", "ring", "line"];
+
+/**
+ * A decal: 1 inside the shape, 0 outside, with a `soft` edge (tile units). Positions wrap, so a
+ * shape near an edge continues on the other side. Kinds: circle (r), rect (w, h, round), ngon
+ * (sides, r), star (sides, r, inner), ring (r, w), line (x0, y0, x1, y1, w). `rot` in degrees.
+ */
+export function shape(o?: unknown): Field {
+  const p = opts(o, "shape", SHAPE_KEYS);
+  const kind = String(p.kind ?? "circle");
+  if (!SHAPE_KINDS.includes(kind)) throw new LoomError(`shape kind: ${SHAPE_KINDS.join(", ")} (got "${kind}")`);
+  const cx = num(p.cx ?? 0.5, "shape cx"), cy = num(p.cy ?? 0.5, "shape cy"), r = num(p.r ?? 0.25, "shape r");
+  const w = num(p.w ?? 0.3, "shape w"), h = num(p.h ?? w, "shape h"), sides = whole(p.sides ?? 6, "shape sides"), rot = (num(p.rot ?? 0, "shape rot") * Math.PI) / 180;
+  const soft = Math.max(1e-4, num(p.soft ?? 0.01, "shape soft")), inner = num(p.inner ?? r * 0.5, "shape inner"), round = num(p.round ?? 0, "shape round");
+  const x0 = num(p.x0 ?? 0.2, "shape x0"), y0 = num(p.y0 ?? 0.5, "shape y0"), x1 = num(p.x1 ?? 0.8, "shape x1"), y1 = num(p.y1 ?? 0.5, "shape y1");
+  const wrapD = (d: number) => d - Math.round(d);
+  const dist = (dx: number, dy: number): number => {
+    switch (kind) {
+      case "circle": return Math.hypot(dx, dy) - r;
+      case "rect": {
+        const qx = Math.abs(dx) - w / 2 + round, qy = Math.abs(dy) - h / 2 + round;
+        return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - round;
+      }
+      case "ring": return Math.abs(Math.hypot(dx, dy) - r) - w / 2;
+      case "ngon": {
+        const an = Math.PI / sides, a = mod(Math.atan2(dy, dx) + Math.PI / 2, 2 * an) - an;
+        return Math.hypot(dx, dy) * Math.cos(a) - r * Math.cos(an);
+      }
+      case "star": {
+        const an = Math.PI / sides, a = mod(Math.atan2(dy, dx) + Math.PI / 2, 2 * an), t = Math.abs(a - an) / an;    // 0 at a tip, 1 at a valley
+        return Math.hypot(dx, dy) - (r + (inner - r) * (1 - t));
+      }
+      default: {
+        // line: distance to the segment (x0, y0) -> (x1, y1), minus half the width
+        const ax = x0 - cx, ay = y0 - cy, bx = x1 - cx, by = y1 - cy, ex = bx - ax, ey = by - ay;
+        const t = clamp(((dx - ax) * ex + (dy - ay) * ey) / (ex * ex + ey * ey || 1e-9));
+        return Math.hypot(dx - ax - ex * t, dy - ay - ey * t) - w / 2;
+      }
+    }
+  };
+  const cs = Math.cos(rot), sn = Math.sin(rot);
+  return new Field((n) => {
+    const out = new Float32Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const du = wrapD((x + 0.5) / n - cx), dv = wrapD((y + 0.5) / n - cy);
+      const dx = du * cs + dv * sn, dy = -du * sn + dv * cs;
+      out[y * n + x] = 1 - smooth(-soft / 2, soft / 2, dist(dx, dy));
+    }
+    return out;
+  }, `shape(${kind})`);
+}

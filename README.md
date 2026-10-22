@@ -81,7 +81,10 @@ material("brick_wall", { size: 512, depth: 0.03 }, {
 
 - **Generators**: fractal and ridged noise (stretchable for grain and streaks), Worley cells with
   edges and ids, dots, running-bond bricks, tiles, hexagons, planks with grain, overlapping scales,
-  stripes and waves. Patterns expose `.mask`, `.id` (a random value per piece) and `.dist`.
+  stripes, waves, basket `weave`, `checker` and `shape` decals (circle, rect, ngon, star, ring, line:
+  markings, rims, runes, logos). Patterns expose `.mask`, `.id` (a random value per piece) and `.dist`.
+- **Images in**: `image("photo.png", { seamless: 0.25 })` turns a photo or painted texture into a
+  tiling color (edge-blended), and `.luma()` into a height map, to mix with generated detail.
 - **Operators**: arithmetic, mix, levels, smoothstep, threshold, normalize, blur, domain warp,
   offset, repeat, quarter-turn rotate and flip, all wrapping at the tile edge.
 - **Weathering from height**: `cavity()` for grime, `convex()` for worn edges, `facing("up")` for
